@@ -1,81 +1,50 @@
-# Estado y arquitectura del Nodo Sur
+# Así funciona el Nodo Sur
 
-**Corte documental: 23 de noviembre de 2026.** Se combinaron salidas compartidas durante la implementación, el registro de subdominios de ese día y la lectura visual de las consolas de Proxmox. Una consola abierta muestra el estado visible y comandos anteriores; no equivale a releer todos los archivos de la VM ni a probar un reinicio.
+El sitio parece una sola página para quien lo visita, pero detrás trabajan cinco VM. Esta guía sigue una petición desde el navegador hasta WordPress y señala qué piezas comparten los dos backends. El estado descrito llega hasta el **23 de noviembre de 2026** y combina salidas de implementación con lo que quedó visible en las consolas de Proxmox.
+
+[Volver al inicio](../README.md) · [Ir a los comandos de revisión](verificacion-infraestructura.md)
 
 ## Flujo de una solicitud
 
-1. Un cliente que alcanza la red del laboratorio o entra por VPN consulta `equipo-tas-01.local` al BIND de VMFabian (`10.33.195.224`). El registro A devuelve esa misma IP. `grafana` y `prometheus` también apuntan a ella.
-2. HAProxy recibe HTTP en 80 y lo redirige a HTTPS en 443. Para WordPress termina TLS y usa `roundrobin` hacia `10.33.199.12:80` y `10.33.199.13:80`, según los chequeos GET `/health.php` con estado 200.
-3. Cada backend usa Nginx, PHP-FPM y su propia copia de WordPress. `home` y `siteurl` se migraron al dominio HTTPS. Los dos consultan la misma BD `wordpress` en `10.33.199.11:3306` mediante el usuario `wp_user`.
-4. Los archivos de `wp-content/uploads` residen en VMNFS (`10.33.199.14:/srv/nfs/wp-uploads`) y se montan en los dos backends. El código, plugins y temas de WordPress permanecen en cada backend y requieren despliegue coordinado; NFS no sincroniza esos archivos.
-5. Las ACL de HAProxy envían `grafana.equipo-tas-01.local` a `127.0.0.1:3000` y `prometheus.equipo-tas-01.local` a `127.0.0.1:9090` en VMFabian. Prometheus recopila métricas del conjunto; Grafana las visualiza.
+1. **El navegador busca el nombre.** El DNS de [VMFabian](vmfabian/README.md) responde que `equipo-tas-01.local` está en `10.33.195.224`. Ese nombre solo funciona en clientes que llegan a la red del proyecto y consultan el DNS adecuado; desde fuera puede hacer falta la VPN.
+2. **HAProxy recibe la conexión HTTPS.** Está en VMFabian y usa un certificado firmado por la CA interna del equipo. Si la petición es para WordPress, revisa `/health.php` y elige entre [VMMaty](vmmaty/README.md) (`10.33.199.12:80`) y [VMMaty2](vmmaty2/README.md) (`10.33.199.13:80`) con `roundrobin`.
+3. **El backend prepara la página.** Cada VM web tiene Nginx, PHP-FPM y una copia del código de WordPress. Las dos usan la misma base `wordpress` en [VMOmar](vmomar/README.md), `10.33.199.11:3306`.
+4. **Las imágenes salen del mismo lugar.** Ambos backends montan `10.33.199.14:/srv/nfs/wp-uploads` desde [VMNFS](vmnfs/README.md) en `/var/www/html/wp-content/uploads`.
 
-El tramo externo cliente → HAProxy usa HTTPS con una CA interna. El tramo observado HAProxy → backends WordPress usa HTTP en la red privada. La confianza de la CA en Windows no cifra ese tramo. No se verificó TLS entre backends y MariaDB.
+Los nombres `grafana.equipo-tas-01.local` y `prometheus.equipo-tas-01.local` también llegan a VMFabian. HAProxy los envía a Grafana (`127.0.0.1:3000`) y Prometheus (`127.0.0.1:9090`) en esa VM.
 
-## Inventario y evidencia
+## Por qué hacen falta la BD y el NFS compartidos
 
-| VM | Servicio y red observados | Evidencia y límite |
+Si cada backend tuviera su propia base, un pedido o cambio hecho en uno podría no aparecer en el otro. Por eso ambos apuntan a VMOmar. Si cada uno guardara las imágenes en su disco, una foto subida a VMMaty podría faltar cuando HAProxy enviara la siguiente visita a VMMaty2. Por eso `uploads` se monta desde VMNFS.
+
+El NFS **no copia plugins, temas ni el código**. Esos archivos viven por separado en los dos backends y deben actualizarse de forma coordinada. Tampoco reemplaza los respaldos: todavía no hay una restauración de prueba documentada.
+
+## Qué comprobamos
+
+| Pieza | Resultado visto | Qué demuestra |
 | --- | --- | --- |
-| VMFabian, 236 | `10.33.195.224`, `10.33.199.10`; BIND, HAProxy, Grafana, Prometheus | `named` y `haproxy` activos, sintaxis válida, dos backends en configuración, subdominios y HTTPS probados localmente. La consola del 23-11 mostró las pruebas ya ejecutadas. |
-| VMOmar, 239 | `10.33.195.225`, `10.33.199.11`; MariaDB | El puerto 3306 escuchaba en `.11` y `mariadb` figuraba habilitado. Las cuentas `wp_user` para `.12` y `.13` fueron verificadas en octubre. |
-| VMMaty, 237 | `10.33.195.162`, `10.33.199.12`; Nginx, PHP 8.3, WordPress | `DB_HOST=.11`, NFS montado, TCP a BD y HTTP 200. En noviembre se vieron entrada de montaje, dependencia de Nginx, prueba de escritura NFS y HTTP 200. |
-| VMMaty2, 311 | `10.33.195.228`, `10.33.199.13`; Nginx, PHP 8.1, WordPress | `DB_HOST=.11`, NFS montado, TCP a BD y HTTP 200. En noviembre se vieron `x-systemd.automount`, dependencia de montaje de Nginx y HTTP 200. |
-| VMNFS, 312 | `10.33.195.166`, `10.33.199.14`; NFS | `/etc/exports` autoriza solo `.12` y `.13`; `nfs-server` activo y habilitado en salidas compartidas. La consola del 23-11 mostró `enabled` y el mismo archivo de exportación. |
+| DNS y HAProxy | Configuración válida; los tres nombres respondieron hacia `.224`. | El proxy pudo recibir WordPress, Grafana y Prometheus en las pruebas de noviembre. |
+| VMMaty y VMMaty2 | Nginx y PHP activos, `DB_HOST=10.33.199.11`, conexión TCP a la BD, NFS montado y HTTP 200. | Ambos podían servir el sitio al probarlos. |
+| VMOmar | MariaDB escuchaba en `10.33.199.11:3306`; `wp_user` figuraba para `.12` y `.13`. | Los dos backends tenían un destino de BD común. |
+| VMNFS | `/etc/exports` autorizaba `.12` y `.13`; el servicio estaba habilitado. | Los backends podían compartir el directorio de archivos subidos. |
+| Monitoreo | La consulta registrada a Prometheus informó cinco máquinas y tres servicios `up`. | Llegaban métricas en ese momento; no es una garantía permanente. |
 
-Las IP de acceso `10.33.195.*` pueden variar si no existe reserva o configuración fija; las direcciones indicadas son las observadas. Las IP privadas `.10` a `.14` pertenecen a `10.33.199.8/29` y fueron usadas para las dependencias internas.
+En noviembre también quedaron visibles entradas NFS de arranque y dependencias de montaje de Nginx en los dos backends. Eso respalda que se preparó la persistencia. Todavía falta registrar un reinicio controlado de las VM para comprobar todo el recorrido después de arrancar.
 
-## Rutas y cambios por VM
+## DNS, VPN y certificado en el computador de pruebas
 
-### VMFabian
+La IP `10.33.195.224` debe ser alcanzable desde el cliente. Cuando la VPN estaba desconectada, fallaban las pruebas a DNS y HTTPS; con VPN se pudo consultar BIND directamente y alcanzar los puertos 53 y 443. El dominio `.local` no está publicado en el DNS general de la universidad.
 
-| Ruta | Cambio o uso acreditado |
-| --- | --- |
-| `/etc/bind/named.conf.local` | Declaraciones de las zonas directa e inversa. La zona antigua `tas-01.local` coexistía en septiembre. |
-| `/etc/bind/db.equipo-tas-01.local` | Se añadieron registros A para `grafana` y `prometheus` a `10.33.195.224`; serial observado `2026112301`. |
-| `/etc/bind/db.tas-01.local` | En septiembre se corrigió un registro fuera de zona; se conserva como antecedente histórico. |
-| `/etc/bind/db.10` | PTR de la red privada; `10.33.199.12` devolvía `backend1.equipo-tas-01.local.`. |
-| `/etc/haproxy/haproxy.cfg` | Frontend HTTP/HTTPS, selección por nombre, backends de monitoreo y dos servidores WordPress con `roundrobin` y chequeo `/health.php`. |
-| `/root/equipo-tas-pki/server.ext` | Se ampliaron los SAN a Grafana y Prometheus, conservando los nombres web anteriores. |
-| `/etc/haproxy/certs/equipo-tas-01.local.pem` | Se instaló el certificado renovado. Contiene clave privada: nunca copiar al repositorio. |
-| `/home/fabi/monitoreo/docker-compose.yml` | Despliegue existente de Grafana/Prometheus; leído, sin modificación acreditada en la intervención de subdominios. |
+Durante la prueba del 23 de noviembre se añadió en Windows una regla DNS temporal para el dominio y sus subdominios. Funcionó, pero después se **eliminó a petición del propietario** y se limpió la caché. No quedó esa regla instalada. El certificado sigue firmado por una CA interna que Windows no tenía como confiable, por lo que el navegador puede mostrar una advertencia aunque el DNS resuelva bien. No se instaló la CA en Windows.
 
-Antes de la intervención de subdominios se copiaron los archivos afectados a `/root/subdominios-20261123.5hsNu4/`. En la verificación local, `named-checkconf -z`, `haproxy -c`, `dig`, `openssl verify` y GET HTTPS con `--cacert` dieron resultados correctos. Prometheus devolvió 405 al usar HEAD en `/targets`; la comprobación GET de `/api/v1/targets` devolvió 200.
+El navegador habla con HAProxy por HTTPS. En la configuración documentada, HAProxy habla con WordPress por HTTP dentro de la red privada; tampoco se verificó TLS hacia MariaDB. Conviene tener claro ese límite al presentar la seguridad del sistema.
 
-### VMMaty y VMMaty2
+## Lo que todavía nos falta demostrar
 
-| Ruta o ajuste | Cambio o uso acreditado |
-| --- | --- |
-| `/var/www/html/wp-config.php` en ambas | `DB_HOST=10.33.199.11`, `DB_NAME=wordpress`, `DB_USER=wp_user`. Excluir archivo real por contraseña y salts. |
-| `/etc/nginx/sites-available/wordpress` en VMMaty | Sitio del dominio `equipo-tas-01.local`, PHP 8.3 y chequeo de salud. |
-| `/etc/nginx/sites-enabled/wordpress` en VMMaty2 | Sitio observado con `server_name equipo-tas-01.local www.equipo-tas-01.local`, raíz `/var/www/html` y socket `/run/php/php8.1-fpm.sock`. |
-| `/var/www/html/health.php` en ambas | Ruta del chequeo de HAProxy. Desde localhost en VMMaty2 devolvió 403 en la revisión de noviembre, coherente con la restricción de origen; HAProxy debe comprobarla desde `.10`. |
-| `/etc/fstab` en ambas | Entrada NFS a `/var/www/html/wp-content/uploads`. En VMMaty2 se observó `x-systemd.automount`; en ambas, la consola mostró montaje activo y Nginx dependiente del punto de montaje. |
-| `/var/www/html/wp-content/uploads` | Montaje compartido desde `.14`; no guardar el paquete de despliegue dentro de esta ruta. |
+- Apagar por separado cada backend y observar desde la web que el sitio continúa funcionando.
+- Reiniciar las VM y repetir las pruebas de NFS, BD, proxy y monitoreo después del arranque.
+- Restaurar un respaldo en un destino de prueba; un archivo SQL de 2,5 MB por sí solo no prueba recuperación.
+- Completar una compra de prueba en WooCommerce desde ambos backends y comprobar que código, plugins y temas coinciden.
+- Revisar acceso a Grafana y Prometheus, confianza de la CA en los clientes y el cifrado de los enlaces internos.
 
-En VMMaty se cambió el dominio de las opciones de WordPress desde `http://www.mati-tas-01.local` a `https://equipo-tas-01.local` tras un respaldo privado. Ese procedimiento y sus resultados históricos se detallan en [docs/vmmaty](vmmaty/README.md).
-
-En VMMaty2 se copió el árbol del sitio desde el backend 1. El primer intento de archivo `wp-site.tgz` en el propio NFS fue incompleto; se volvió a crear en `/tmp` y se transfirió después. Faltó inicialmente la extensión PHP `mysqli`, lo que causó HTTP 500. Tras corregir esa dependencia y el acceso TCP a MariaDB, el sitio local pasó a HTTP 200. La consola de noviembre mostró `/etc/nginx/sites-enabled/wordpress`, HTTP 200 y montaje NFS activo.
-
-### VMOmar y VMNFS
-
-La escucha de MariaDB se redujo de `0.0.0.0:3306` a `10.33.199.11:3306`. Las cuentas `wp_user` vistas en octubre tenían host `.12` y `.13`; el respaldo privado `/root/wordpress-pre-cutover.sql` figuraba con 2,5 MB. No hay restauración de prueba acreditada ni copia saneada del archivo de configuración de MariaDB.
-
-`/etc/exports` de VMNFS contiene `/srv/nfs/wp-uploads` para `10.33.199.12` y `10.33.199.13` con `rw,sync,no_subtree_check,all_squash,anonuid=33,anongid=33`. `all_squash` mapea escrituras al usuario/grupo `www-data` (UID/GID 33). Los dos backends vieron el mismo directorio. Una prueba de escritura y lectura en el montaje de VMMaty quedó registrada en la consola de noviembre.
-
-## Acceso desde Windows y VPN
-
-El cliente debe alcanzar `10.33.195.224` por la red universitaria o VPN. Cuando la VPN estaba desconectada, las consultas a DNS y HTTPS agotaban el tiempo; con la VPN, las pruebas TCP a 53 y 443 y `nslookup ... 10.33.195.224` funcionaron. `equipo-tas-01.local` es un nombre interno y los DNS de la universidad no lo resuelven por sí solos.
-
-El 23-11 se añadió temporalmente en Windows una regla NRPT para `equipo-tas-01.local` y sus subdominios hacia `10.33.195.224`. La resolución predeterminada funcionó y los tres sitios respondieron con 200, 200 y redirección 302, respectivamente, al probar la aplicación por HTTPS sin validar la CA. **A solicitud del propietario se eliminó la regla y se limpió la caché DNS**; se verificó que no quedó ninguna regla para ese dominio. Los servidores DNS de Wi-Fi y VPN conservaron sus valores. Windows todavía no confía en la CA interna: `curl` con validación informó `SEC_E_UNTRUSTED_ROOT`. No se instaló ninguna CA en Windows.
-
-El sufijo `.local` puede interferir con mDNS. Para una presentación hay que comprobar resolución con el cliente real y decidir conscientemente cómo confiar en la CA interna.
-
-## Pendientes que no deben declararse cumplidos
-
-- Restaurar respaldos en un destino de prueba y medir recuperación; la existencia de SQL o copias de archivos no basta.
-- Reiniciar de forma controlada las VM y comprobar montaje NFS, dependencias, MariaDB, HAProxy y monitoreo después del arranque.
-- Ejecutar y registrar un fallo real de cada backend desde la web; la configuración `roundrobin` y los chequeos `up` no sustituyen esa prueba.
-- Verificar compra de prueba y plugins de WooCommerce en ambos backends, además de despliegue coordinado de código y sesiones si la aplicación lo requiere.
-- Revisar permisos de acceso a Grafana y Prometheus, confianza de CA de clientes y cifrado de los tramos internos según la rúbrica.
-
-No se confirma aquí la eliminación de PrestaShop, una CA instalada en clientes ni una política de respaldos restaurables. Tampoco se publican archivos de configuración completos sin una copia saneada y revisada del origen.
+Las rutas concretas están en la página de cada VM y en el [índice de configuración](../configuración/configuracion_utilizada.md). La [bitácora](bitacora-infraestructura.md) cuenta los errores que encontramos por el camino y cómo se corrigieron. No se publican contraseñas, claves privadas, SQL ni datos de clientes.

@@ -1,27 +1,33 @@
-# Bitácora de integración reciente
+# Cómo fuimos armando el Nodo Sur
 
-Este registro complementa la [bitácora histórica de VMMaty](vmmaty/bitacora.md). Se basa en salidas compartidas, el documento de subdominios y las consolas visibles de Proxmox; no recrea cambios sin evidencia.
+Esta bitácora reúne los cambios que conectaron las cinco VM. Conservamos los errores porque ayudan a explicar por qué existe cada ajuste. Para los primeros pasos de VMMaty está la [bitácora de septiembre](vmmaty/bitacora.md); aquí seguimos desde la integración con el resto del equipo.
 
-| Período | Problema o cambio | Resultado acreditado |
-| --- | --- | --- |
-| Septiembre de 2026 | El PTR de `.12` devolvía `NXDOMAIN`; luego la zona inversa se corrigió y VMMaty recibió una copia secundaria. | `dig -x 10.33.199.12` devolvió `backend1.equipo-tas-01.local.`. |
-| 7 de septiembre | WordPress todavía usaba `http://www.mati-tas-01.local`. Se respaldaron configuración y SQL y se hizo `search-replace` de URL. | `home` y `siteurl` devolvieron `https://equipo-tas-01.local`; HTTPS en el proxy respondió 200 para raíz y login. |
-| Octubre de 2026 | Se introdujeron VMMaty2, VMOmar y VMNFS. VMMaty2 empezó solo con la página predeterminada de Nginx y sin WordPress. | El sitio se copió; Nginx pasó a servir PHP con socket 8.1. |
-| 23 de octubre | El primer `wp-site.tgz` escrito en `uploads` quedó truncado; al extraerlo apareció `Unexpected EOF`. | Se eliminó la copia incompleta, se creó el paquete en `/tmp` y luego se transfirió. La presencia de `wp-config.php` y `wp-load.php` se verificó en VMMaty2. |
-| 23 de octubre | VMMaty2 devolvió HTTP 500 por falta de `mysqli`. Después hubo timeout hacia `10.33.199.11:3306`. | Se instaló/habilitó la extensión necesaria y se resolvió la conectividad. Ambos backends mostraron TCP a `.11` y HTTP 200. |
-| 23 de octubre | MariaDB escuchaba inicialmente en todas las interfaces. | La escucha observada se restringió a `10.33.199.11:3306`; `wp_user` se listó para `.12` y `.13`. |
-| 23 de octubre | HAProxy inicialmente marcó VMMaty2 como DOWN por HTTP 500. | El registro posterior informó VMMaty2 UP con código 200 y dos servidores activos. |
-| 21–23 de noviembre | Se revisó persistencia del NFS. VMMaty2 había mostrado previamente el sistema de archivos raíz en `findmnt` y ausencia de entrada NFS en fstab. | Las consolas posteriores mostraron NFS montado en ambos backends, entradas de arranque, Nginx dependiente del montaje y HTTP 200. No se documentó un reinicio completo de prueba. |
-| 23 de noviembre | Se añadieron subdominios de Grafana y Prometheus en BIND, HAProxy y el certificado de VMFabian. | Resolución a `.224`, certificado validado con CA interna y GET HTTPS 200 de los servicios y de WordPress. [Detalle](documentacion_subdominios_monitoreo_2026-11-23.docx). |
-| 23 de noviembre | Windows no resolvía los tres nombres mediante sus DNS predeterminados. | Se añadió una regla NRPT temporal dirigida a `.224`; las consultas y sitios funcionaron. Luego se eliminó a solicitud del propietario, se limpió la caché y se verificó que no quedara regla. |
+[Volver al inicio](../README.md) · [Ver el sistema completo](estado-nodo-sur.md)
 
-## Correcciones que conviene explicar
+## Septiembre: dejar listo el primer backend
 
-- `php-fpm` era un metapaquete en VMMaty2; el servicio efectivo era `php8.1-fpm.service`.
-- El `HTTP 500` de VMMaty2 no era un problema de HAProxy: WordPress indicó que faltaba la extensión MySQL de PHP.
-- La conectividad TCP a MariaDB y un HTTP 200 del sitio son pruebas diferentes; ambas se comprobaron.
-- `HEAD /targets` devolvió 405 en Prometheus; `GET /api/v1/targets` devolvió 200.
-- El 403 del `/health.php` de VMMaty2 desde localhost es compatible con limitar esa ruta al proxy; debe comprobarse desde VMFabian.
-- El DNS interno funciona al consultar VMFabian por VPN. Resolver el nombre no implica confiar en la CA del certificado ni que el resto de Internet conozca el dominio `.local`.
+La instalación empezó con VMMaty y el nombre de prueba `mati-tas-01.local`. El PTR de `10.33.199.12` llegó a devolver `NXDOMAIN`; después de corregir la zona inversa y su copia secundaria, la consulta devolvió `backend1.equipo-tas-01.local.`.
 
-Los respaldos SQL y del sitio permanecen fuera del repositorio. No hay evidencia de restauración, failover desde el navegador ni pruebas completas de WooCommerce.
+Antes de pasar WordPress a `https://equipo-tas-01.local`, se guardó una copia privada de `wp-config.php` y de la base. La simulación de `search-replace` anunció cuatro reemplazos. Las consultas posteriores a `home` y `siteurl` mostraron el nombre nuevo. HAProxy necesitaba `/health.php`, pero el archivo no existía y el chequeo respondía 404. Al añadirlo y configurar Nginx, el backend pasó a responder 200. El [manual de VMMaty](vmmaty/README.md) conserva los comandos de esa etapa.
+
+## Octubre: pasar de una VM web a dos
+
+VMMaty2 empezó con la página de bienvenida de Nginx, sin WordPress. Se preparó una copia del sitio de VMMaty. El primer `wp-site.tgz` se escribió dentro de `uploads`, que ya era NFS, y quedó truncado: `tar` devolvió `Unexpected EOF`. La solución fue crear el paquete en `/tmp`, transferirlo y comprobar en VMMaty2 que estaban `wp-config.php` y `wp-load.php`.
+
+Después llegaron dos fallos distintos. WordPress respondió HTTP 500 porque a PHP 8.1 le faltaba la extensión `mysqli`. Al resolver eso, la página seguía esperando la BD: la prueba TCP a `10.33.199.11:3306` fallaba. Se corrigió la conectividad y, en las salidas del **23 de octubre**, los dos backends alcanzaron MariaDB y devolvieron HTTP 200. El servicio PHP de la segunda VM es `php8.1-fpm.service`; instalar el metapaquete `php-fpm` no creó un servicio llamado `php-fpm.service`.
+
+En VMOmar, MariaDB escuchaba inicialmente en `0.0.0.0:3306`. La escucha observada después quedó limitada a `10.33.199.11:3306`. El usuario `wp_user` figuraba para los dos orígenes privados, `.12` y `.13`. También se listó un SQL privado previo al cambio. Sigue faltando probar que ese respaldo se puede restaurar.
+
+HAProxy marcó VMMaty2 como DOWN mientras su chequeo devolvía 500. Cuando la página volvió a responder 200, el registro del proxy informó el backend UP y dos servidores activos. La causa estaba en el backend; cambiar el balanceador no habría reparado `mysqli` ni la conexión a la BD.
+
+## Noviembre: comprobar el NFS y el monitoreo
+
+Una revisión de VMMaty2 había mostrado `/` en `findmnt` para `uploads` y no había entrada NFS en fstab. Eso significaba que el punto de montaje no estaba activo en ese momento. En las consolas posteriores se vio el NFS montado en **ambos** backends, entradas para el arranque, Nginx dependiente del montaje y la raíz del sitio respondiendo 200. VMMaty también mostró una prueba de escritura y lectura en el recurso. Esta evidencia es buena para revisar la configuración, pero no sustituye un reinicio completo de prueba.
+
+El **23 de noviembre** se dieron nombres propios a Grafana y Prometheus. En VMFabian se añadieron registros DNS, rutas de HAProxy y nombres al certificado. Las pruebas locales con la CA interna devolvieron 200 para WordPress, Grafana y la API de Prometheus. Una prueba con HEAD en `/targets` dio 405 porque esa ruta aceptaba GET y OPTIONS; al usar GET en `/api/v1/targets`, la respuesta fue 200. El [documento de subdominios](documentacion_subdominios_monitoreo_2026-11-23.docx) guarda rutas, comandos y respaldo de esa intervención.
+
+En el computador Windows, los nombres no resolvían con el DNS predeterminado aunque BIND sí respondía a una consulta directa. Se probó una regla DNS específica para `equipo-tas-01.local` y sus subdominios: los tres nombres empezaron a resolver y los sitios respondieron. Luego el propietario pidió revertirla. Se eliminó la regla, se limpió la caché y se verificó que no quedara instalada. La advertencia del certificado era un asunto aparte: Windows no confiaba en la CA interna y no se instaló esa CA.
+
+## Qué sigue abierto
+
+No hemos dejado registrada una restauración, una caída controlada de cada backend observada desde el navegador ni una compra completa de WooCommerce. Tampoco hay una prueba de reinicio de todas las VM después de configurar la persistencia. La [guía de verificación](verificacion-infraestructura.md) indica cómo repetir las consultas antes de cerrar esos puntos.

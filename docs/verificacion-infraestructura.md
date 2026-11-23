@@ -1,6 +1,8 @@
-# Verificación de infraestructura
+# Cómo revisar el Nodo Sur antes de presentarlo
 
-Comandos de lectura para volver a comprobar el estado antes de una presentación. Comparar las salidas reales con la columna esperada; estas órdenes no reemplazan las pruebas funcionales ni una restauración. No publicar salidas que revelen contraseñas, claves, tokens o datos de clientes.
+Estos son los comandos que usaríamos para comprobar cada pieza antes de una demostración. Ejecuta cada bloque en la VM indicada y compara la salida con lo que se explica debajo. Son consultas; no reemplazan una compra de prueba, una restauración ni un reinicio controlado. Comparte solo salidas que no muestren contraseñas, claves, tokens o datos de clientes.
+
+[Volver al inicio](../README.md) · [Entender primero el recorrido](estado-nodo-sur.md)
 
 ## VMFabian: DNS, certificado y proxy
 
@@ -24,6 +26,7 @@ Esperado según la implementación: servicios activos, configuración válida, t
 ```bash
 hostname
 ip -br -4 address
+# Ejecutar solo la línea que corresponde a la VM:
 systemctl is-active nginx php8.3-fpm  # VMMaty
 systemctl is-active nginx php8.1-fpm  # VMMaty2
 sudo nginx -t
