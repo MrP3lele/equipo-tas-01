@@ -1,5 +1,7 @@
 # Pruebas y pendientes de VMMaty
 
+**Actualización:** las pruebas y pendientes vigentes para las cinco VM están en [verificación de infraestructura](../verificacion-infraestructura.md) y [estado del nodo](../estado-nodo-sur.md). En particular, `DB_HOST=localhost`, migración de BD pendiente y segundo backend pendiente son datos históricos de septiembre: en octubre se observaron `DB_HOST=10.33.199.11`, dos backends y HTTP 200.
+
 Las observaciones históricas corresponden al trabajo registrado hasta el **7 de septiembre de 2026**. Los comandos siguientes son procedimientos para volver a comprobarlo; no se han ejecutado contra las VM durante esta incorporación al repositorio.
 
 ## Comprobaciones en VMMaty
@@ -76,7 +78,7 @@ Los identificadores siguientes organizan el registro documental; no afirman que 
 
 Para nuevas evidencias anotar fecha/zona horaria, VM, comando, esperado, observado e interpretación. Conservar solo extractos relevantes sin contraseñas, cookies, datos de clientes ni tokens. Las capturas complementan, pero no reemplazan, configuraciones saneadas.
 
-## Pendientes priorizados
+## Pendientes priorizados al 10 de septiembre de 2026
 
 1. Contrastar las rutas documentadas con las configuraciones actuales y completar recursos/versiones del inventario.
 2. Preparar y validar la futura BD separada antes de cambiar `DB_HOST`; coordinar respaldo nuevo, pausa de escrituras y reversión.

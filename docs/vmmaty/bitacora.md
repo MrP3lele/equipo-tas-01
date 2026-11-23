@@ -1,5 +1,7 @@
 # Bitácora de VMMaty
 
+La continuación de octubre y noviembre, incluida la migración a MariaDB, NFS y el segundo backend, está en la [bitácora de infraestructura](../bitacora-infraestructura.md). Las entradas de este archivo son históricas y terminan en septiembre.
+
 Registro documental incorporado el **10 de septiembre de 2026**. Se basa en las salidas y capturas conservadas del trabajo de Maty; no recrea commits pasados ni inventa fechas de ejecución. Cuando no hay fecha verificable se indica el límite del registro.
 
 | Fecha o período acreditado | Problema o actividad | Cambio y resultado conocido |

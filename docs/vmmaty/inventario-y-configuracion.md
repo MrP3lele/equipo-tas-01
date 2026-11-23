@@ -1,5 +1,7 @@
 # Inventario y configuración de VMMaty
 
+**Actualización posterior:** desde octubre WordPress usa MariaDB en `10.33.199.11` y `uploads` por NFS en `10.33.199.14`. La consola de noviembre mostró el montaje activo y su dependencia de Nginx. El cuadro siguiente es una fotografía del **7 de septiembre**, antes de esos cambios. Ver [estado del nodo](../estado-nodo-sur.md).
+
 Estado documentado con salidas y capturas compartidas hasta el **7 de septiembre de 2026**. Responsable técnico de la VM: Maty. CPU, RAM, disco, versión exacta de WordPress y versión del motor de BD requieren una lectura actual antes de completarse.
 
 ## Identidad y servicios

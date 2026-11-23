@@ -1,5 +1,7 @@
 # Respaldo y recuperación de VMMaty
 
+**Actualización:** este procedimiento es anterior a la migración a MariaDB en VMOmar y al montaje NFS de `uploads`. En octubre se listó `/root/wordpress-pre-cutover.sql` en VMOmar, pero no se acreditó una restauración. Para un respaldo actual hay que coordinar BD en `.11`, archivos subidos en `.14` y código/configuración de ambos backends. Ver [estado del nodo](../estado-nodo-sur.md).
+
 Este documento describe el respaldo conocido anterior al cambio de dominio y las condiciones para repetirlo o probar su restauración. **No contiene un respaldo de datos y no acredita una recuperación ejecutada.**
 
 ## Respaldo histórico
