@@ -22,8 +22,6 @@ La [vista completa del recorrido](docs/estado-nodo-sur.md) explica las conexione
 
 ## Configuraciones y evidencias
 
-Los [archivos de configuración documentados](configuración/configuracion_utilizada.md) indican las rutas en cada servidor y muestran solo fragmentos seguros. El [documento de los subdominios de monitoreo](docs/documentacion_subdominios_monitoreo_2026-11-23.docx) recoge el cambio de DNS, certificado y proxy del 23 de noviembre de 2026.
-
-Esta documentación llega hasta el **23 de noviembre de 2026**. Hemos visto respuestas HTTP 200 de ambos backends y el NFS montado, pero todavía falta dejar registrada una restauración de respaldo, un reinicio completo y una prueba de caída de cada backend desde la web.
+Los [archivos de configuración documentados](configuración/configuracion_utilizada.md) indican las rutas en cada servidor y muestran solo fragmentos seguros. El [documento de los subdominios de monitoreo](docs/documentacion_subdominios_monitoreo_2026-11-23.docx) recoge el cambio de DNS, certificado y proxy.
 
 **Antes de subir archivos:** no incluir `wp-config.php` real, contraseñas, claves privadas, tokens, respaldos SQL, perfiles VPN ni datos de clientes. Este repositorio ayuda a entender y revisar el sistema; no reemplaza un respaldo de las VM.
