@@ -1,1 +1,0 @@
-# Añadir scripts de validacion
