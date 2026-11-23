@@ -4,7 +4,7 @@ Infraestructura de WordPress y WooCommerce con dos backends, base de datos separ
 
 ## Mapa del entorno
 
-| VM | IP privada | IP de acceso observada | Función |
+| VM | IP privada | IP de acceso | Función |
 | --- | --- | --- | --- |
 | VMFabian (236) | `10.33.199.10` | `10.33.195.224` | BIND, HAProxy, TLS, Prometheus y Grafana |
 | VMOmar (239) | `10.33.199.11` | `10.33.195.225` | MariaDB de WordPress |
