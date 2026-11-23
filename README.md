@@ -1,32 +1,29 @@
 # Equipo TAS 01 — Nodo Sur
 
-Infraestructura de WordPress y WooCommerce con dos backends, base de datos separada, NFS, DNS, HAProxy y monitoreo. Este repositorio contiene documentación y referencias de configuración sin secretos; no es un respaldo de las VM.
+Este repositorio cuenta cómo quedó montado nuestro sitio de WordPress y WooCommerce. La idea es que cualquier integrante del equipo pueda entender qué hace cada VM, dónde revisar su configuración y qué pruebas faltan antes de dar el proyecto por terminado.
 
-## Mapa del entorno
+## Máquinas, direcciones y servicios
 
-| VM | IP privada | IP de acceso | Función |
-| --- | --- | --- | --- |
-| VMFabian (236) | `10.33.199.10` | `10.33.195.224` | BIND, HAProxy, TLS, Prometheus y Grafana |
-| VMOmar (239) | `10.33.199.11` | `10.33.195.225` | MariaDB de WordPress |
-| VMMaty (237) | `10.33.199.12` | `10.33.195.162` | Backend WordPress 1, Nginx y PHP 8.3 |
-| VMMaty2 (311) | `10.33.199.13` | `10.33.195.228` | Backend WordPress 2, Nginx y PHP 8.1 |
-| VMNFS (312) | `10.33.199.14` | `10.33.195.166` | Directorio compartido de archivos subidos |
+| Máquina | IP de acceso (`ens18`) | IP privada (`ens19`) | Servicios del proyecto | Documentación |
+| --- | --- | --- | --- | --- |
+| VMFabian | `10.33.195.224/25` | `10.33.199.10/29` | BIND (DNS), HAProxy (HTTPS y balanceo), Prometheus y Grafana. | [Leer VMFabian](docs/vmfabian/README.md) |
+| VMOmar | `10.33.195.225/25` | `10.33.199.11/29` | MariaDB: base de datos `wordpress` para ambos backends. | [Leer VMOmar](docs/vmomar/README.md) |
+| VMMaty | `10.33.195.162/25` | `10.33.199.12/29` | Nginx, PHP 8.3-FPM, WordPress, WooCommerce y cliente NFS. | [Leer VMMaty](docs/vmmaty/README.md) |
+| VMMaty2 | `10.33.195.228/25` | `10.33.199.13/29` | Nginx, PHP 8.1-FPM, WordPress, WooCommerce y cliente NFS. | [Leer VMMaty2](docs/vmmaty2/README.md) |
+| VMNFS | `10.33.195.166/25` | `10.33.199.14/29` | Servidor NFS para `wp-content/uploads`. | [Leer VMNFS](docs/vmnfs/README.md) |
 
-El cliente consulta `equipo-tas-01.local` en el DNS de VMFabian. HAProxy recibe HTTPS en `10.33.195.224:443` y reparte WordPress entre `.12:80` y `.13:80`. Ambos backends consultan MariaDB en `.11:3306` y montan `10.33.199.14:/srv/nfs/wp-uploads` en `/var/www/html/wp-content/uploads`.
+Llamamos «IP de acceso» a la interfaz que se alcanza desde la red universitaria o por VPN. Son direcciones `10.*` de uso privado; no son IP públicas de Internet. Las direcciones reflejan las salidas observadas en las VM, así que conviene confirmarlas antes de una presentación.
 
-Grafana y Prometheus se publican como `grafana.equipo-tas-01.local` y `prometheus.equipo-tas-01.local` a través de HAProxy. Las rutas locales observadas son `127.0.0.1:3000` y `127.0.0.1:9090`.
+## ¿Qué pasa cuando alguien abre la página?
 
-## Documentación
+El computador pregunta al DNS de VMFabian por `equipo-tas-01.local` y llega a `10.33.195.224`. HAProxy recibe la conexión HTTPS y elige uno de los dos backends sanos. El backend consulta la base de datos de VMOmar y lee los archivos subidos desde VMNFS. Para mirar métricas, VMFabian también publica `grafana.equipo-tas-01.local` y `prometheus.equipo-tas-01.local`.
 
-- [Estado y arquitectura](docs/estado-nodo-sur.md): evidencia por VM, flujo, archivos y límites.
-- [Bitácora reciente](docs/bitacora-infraestructura.md): problemas y correcciones de octubre y noviembre.
-- [Verificación](docs/verificacion-infraestructura.md): comandos de solo lectura y resultados esperados.
-- [VMMaty](docs/vmmaty/README.md): etapa inicial y actualización posterior.
-- [Subdominios de monitoreo](docs/documentacion_subdominios_monitoreo_2026-11-23.docx): intervención del 23 de noviembre en VMFabian.
-- [Índice de configuraciones](configuración/configuracion_utilizada.md): rutas de origen y material saneado.
+La [vista completa del recorrido](docs/estado-nodo-sur.md) explica las conexiones y sus límites. La [bitácora](docs/bitacora-infraestructura.md) cuenta qué problemas aparecieron y cómo se resolvieron. Antes de una demostración, usa la [guía de verificación](docs/verificacion-infraestructura.md).
 
-**Corte de evidencia:** 23 de noviembre de 2026. Las salidas de implementación no implican una inspección nueva de cada archivo de las VM en la fecha del commit.
+## Configuraciones y evidencias
 
-## Seguridad del repositorio
+Los [archivos de configuración documentados](configuración/configuracion_utilizada.md) indican las rutas en cada servidor y muestran solo fragmentos seguros. El [documento de los subdominios de monitoreo](docs/documentacion_subdominios_monitoreo_2026-11-23.docx) recoge el cambio de DNS, certificado y proxy del 23 de noviembre de 2026.
 
-No subir `wp-config.php` real, claves de CA o TLS, contraseñas, salts, tokens, perfiles VPN, respaldos SQL, datos de clientes ni archivos de `uploads`. Los fragmentos documentados no se deben aplicar como reemplazo de configuraciones completas.
+Esta documentación llega hasta el **23 de noviembre de 2026**. Hemos visto respuestas HTTP 200 de ambos backends y el NFS montado, pero todavía falta dejar registrada una restauración de respaldo, un reinicio completo y una prueba de caída de cada backend desde la web.
+
+**Antes de subir archivos:** no incluir `wp-config.php` real, contraseñas, claves privadas, tokens, respaldos SQL, perfiles VPN ni datos de clientes. Este repositorio ayuda a entender y revisar el sistema; no reemplaza un respaldo de las VM.

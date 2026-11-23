@@ -1,40 +1,43 @@
-# Documentación de VMMaty
+# VMMaty: el primer backend
 
-## Actualización de octubre y noviembre de 2026
+VMMaty fue el primer servidor que puso en marcha WordPress y WooCommerce. Hoy comparte el trabajo con VMMaty2: HAProxy puede enviarle visitas a cualquiera de los dos. VMMaty conserva su propia copia del sitio, consulta la base de datos de VMOmar y usa los archivos subidos que entrega VMNFS.
 
-VMMaty ya no usa la BD local como destino de WordPress. Las salidas compartidas del 23 de octubre mostraron `DB_HOST=10.33.199.11`, conectividad TCP y HTTP 200. Su directorio `/var/www/html/wp-content/uploads` quedó montado desde `10.33.199.14:/srv/nfs/wp-uploads`. En la consola de noviembre se observó la entrada NFS de arranque, una dependencia de montaje para Nginx, escritura/lectura en el NFS y HTTP 200. También se integró VMMaty2 como segundo backend en HAProxy. Ver [estado actual del nodo](../estado-nodo-sur.md) y [bitácora reciente](../bitacora-infraestructura.md).
+[Volver al inicio](../../README.md) · [Conocer VMMaty2](../vmmaty2/README.md)
 
-**Las secciones siguientes conservan el estado histórico hasta el 7 de septiembre de 2026.** Sus valores `DB_HOST=localhost`, BD local y segundo backend pendiente no describen la configuración posterior.
+## Qué hay en esta VM
 
-VMMaty ejecuta WordPress con Nginx y PHP-FPM como backend del equipo TAS 01. Este directorio respalda documentalmente su configuración, los cambios realizados y las pruebas conocidas; no contiene una copia de la máquina ni de su base de datos.
+La dirección privada es `10.33.199.12` y la IP de acceso observada fue `10.33.195.162`. Nginx sirve el sitio desde `/var/www/html`; PHP usa `php8.3-fpm` y el socket `/run/php/php8.3-fpm.sock`. La página pública usa `https://equipo-tas-01.local`, que llega primero a VMFabian.
 
-**Corte técnico: 7 de septiembre de 2026. Incorporación al repositorio: 10 de septiembre de 2026.** No se ha realizado una nueva inspección del servidor para esta incorporación. Antes de aplicar procedimientos hay que contrastar el estado actual.
+En septiembre WordPress todavía tenía la URL de prueba `http://www.mati-tas-01.local` y una base local. Antes de cambiar el dominio se hizo un respaldo privado de `wp-config.php` y SQL; luego se actualizaron `home` y `siteurl`. También se agregó `/health.php` porque HAProxy recibía 404 al consultar un archivo que aún no existía. Esa ruta ofrece un chequeo mínimo de PHP y BD, no una prueba de compra en WooCommerce.
 
-## Documentos
+En octubre, `DB_HOST` pasó de `localhost` a `10.33.199.11` para usar MariaDB en VMOmar. `wp-content/uploads` se montó desde VMNFS (`10.33.199.14`). Las salidas compartidas mostraron conexión TCP a la BD y HTTP 200 del sitio. En noviembre la consola mostró el montaje NFS activo, una entrada de arranque y una dependencia de montaje para Nginx; también quedó visible una prueba de escritura y lectura en el recurso.
 
-| Documento | Contenido |
+## Archivos que conviene conocer
+
+| Ruta en VMMaty | Para qué sirve |
 | --- | --- |
-| [Inventario y configuración](inventario-y-configuracion.md) | Interfaces, servicios, rutas y relación con las dependencias externas. |
-| [Bitácora](bitacora.md) | Problemas encontrados, cambios y resultados disponibles. |
-| [Respaldo y recuperación](respaldo-y-recuperacion.md) | Respaldo previo al cambio de dominio, precauciones y recuperación pendiente de probar. |
-| [Pruebas y pendientes](pruebas-y-pendientes.md) | Comandos de comprobación, criterios de aceptación y deuda técnica. |
-| [Manual detallado](manual_vmmaty_detallado_v2.pdf) | Manual de 20 páginas con comandos explicados, solicitudes, correcciones y guía de acceso por VPN. |
+| `/etc/nginx/sites-available/wordpress` | Dominio, raíz del sitio y paso de PHP al socket 8.3. |
+| `/etc/nginx/sites-enabled/wordpress` | Enlace que activa el sitio anterior. |
+| `/var/www/html/health.php` | Chequeo que consulta HAProxy desde la red privada. |
+| `/var/www/html/wp-config.php` | Nombre, usuario y destino de la BD, junto con secretos. No subir el archivo real. |
+| `/etc/fstab` | Entrada para montar `uploads` desde VMNFS al arrancar. |
+| `/var/www/html/wp-content/uploads` | Punto de montaje compartido con VMMaty2. |
+| `/etc/bind/named.conf.local` | Declaración histórica de una zona inversa secundaria; comprobar si aún se usa antes de cambiarla. |
 
-## Estado documentado en septiembre
+El [resumen seguro de configuración](../../configuración/VMMaty/readme.md) señala los valores que se pueden publicar sin revelar contraseñas.
 
-- Dominio de WordPress: `https://equipo-tas-01.local`.
-- Backend: `10.33.199.12:80`; interfaz de acceso: `10.33.195.162/25`.
-- Raíz del sitio: `/var/www/html`; PHP-FPM: `php8.3-fpm`.
-- `home` y `siteurl` apuntan al dominio nuevo; `DB_HOST` todavía es `localhost`.
-- La publicación HTTPS depende del proxy externo. El enlace de ese proxy a Maty permanece en HTTP.
-- La migración de la BD, la comprobación funcional de WooCommerce y la restauración de respaldos siguen pendientes.
+## Cómo comprobar que sigue bien
 
-Las referencias a otras VM describen exclusivamente las dependencias de VMMaty. No son manuales ni configuraciones de esas máquinas.
+Revisa Nginx y PHP, confirma que `findmnt` muestre `10.33.199.14` en `uploads`, comprueba el puerto 3306 de VMOmar y pide la raíz del sitio con `curl`. Los comandos exactos están en la [guía de verificación](../verificacion-infraestructura.md#ambos-backends-web-bd-y-nfs). La respuesta 200 y el montaje activo se observaron; todavía no hay una prueba documentada de reinicio completo ni de restauración.
 
-## Alcance de seguridad
+## Si necesitas reconstruir la historia
 
-No se incluyen `wp-config.php` real, claves o salts de WordPress, contraseñas, certificados con claves privadas, perfiles VPN ni volcados SQL. Las rutas, nombres e IP documentados identifican el laboratorio, no credenciales.
+Estos documentos conservan el estado de **septiembre de 2026**. Cuando mencionan `DB_HOST=localhost` o un segundo backend pendiente, describen esa etapa y no la configuración posterior:
 
-Los fragmentos del manual son referencias históricas, no una exportación nueva de los archivos actuales. Las configuraciones reales saneadas se incorporarán únicamente después de obtenerlas y contrastarlas. No sustituir archivos completos a partir de un fragmento ni ejecutar cambios sin respaldo y autorización.
+- [Inventario y rutas de septiembre](inventario-y-configuracion.md)
+- [Bitácora de septiembre](bitacora.md)
+- [Respaldo inicial y recuperación pendiente](respaldo-y-recuperacion.md)
+- [Pruebas y pendientes de esa etapa](pruebas-y-pendientes.md)
+- [Manual detallado en PDF](manual_vmmaty_detallado_v2.pdf)
 
-El PDF conserva el registro histórico de solicitudes y validaciones. Las pruebas descritas no deben presentarse como ejecutadas nuevamente el día del commit.
+Para los cambios de octubre y noviembre, continúa con la [bitácora del nodo](../bitacora-infraestructura.md).
